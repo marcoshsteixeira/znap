@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZNAP — Admin CRUD</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/vuetify@3.7.2/dist/vuetify.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      html,
+      body,
+      #app {
+        height: 100%;
+        margin: 0;
+        font-family: "Roboto", sans-serif;
+        background-color: #f8f8f8;
+      }
+      .app-container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .w-100 {
+        width: 100%;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+      }
+      .chip-id {
+        font-size: 0.8rem;
+        opacity: 0.7;
+      }
+      v-data-table .v-data-table-header {
+        background: linear-gradient(90deg, #ff1d79, #ff7158, #fe993b);
+        color: white;
+      }
+      v-data-table .v-data-table__progress {
+        color: #ff1d79;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <script src="https://unpkg.com/vue@3.4.38/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@3.7.2/dist/vuetify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.7.7/dist/axios.min.js"></script>
+
+    <script>
+      const { createApp, ref, reactive, computed, onMounted } = Vue;
+      const { createVuetify } = Vuetify;
+
+      const API_BASE = "http://backend:3000";
+      const api = axios.create({ baseURL: API_BASE });
+
+      const formatCurrency = (v) => {
+        if (v === null || v === undefined) return "";
+        const n = Number(v);
+        if (Number.isNaN(n)) return String(v);
+        return n.toLocaleString("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        });
+      };
+
+      // ====== Composables ======
+      function useProdutos() {
+        const items = ref([]);
+        const loading = ref(false);
+        async function fetchAll() {
+          loading.value = true;
+          try {
+            const { data } = await api.get("/produtos");
+            items.value = Array.isArray(data) ? data : data?.data ?? [];
+          } finally {
+            loading.value = false;
+          }
+        }
+        async function create(payload) {
+          const { data } = await api.post("/produtos", payload);
+          return data;
+        }
+        async function update(id, payload) {
+          const { data } = await api.put(`/produtos/${id}`, payload);
+          return data;
+        }
+        async function remove(id) {
+          const { data } = await api.delete(`/produtos/${id}`);
+          return data;
+        }
+        return { items, loading, fetchAll, create, update, remove };
+      }
+
+      function useClientes() {
+        const items = ref([]);
+        const loading = ref(false);
+        async function fetchAll() {
+          loading.value = true;
+          try {
+            const { data } = await api.get("/clientes");
+            items.value = Array.isArray(data) ? data : data?.data ?? [];
+          } finally {
+            loading.value = false;
+          }
+        }
+        async function create(payload) {
+          const { data } = await api.post("/clientes", payload);
+          return data;
+        }
+        async function update(id, payload) {
+          const { data } = await api.put(`/clientes/${id}`, payload);
+          return data;
+        }
+        async function remove(id) {
+          const { data } = await api.delete(`/clientes/${id}`);
+          return data;
+        }
+        return { items, loading, fetchAll, create, update, remove };
+      }
+
+      function usePedidos() {
+        const items = ref([]);
+        const loading = ref(false);
+        async function fetchAll() {
+          loading.value = true;
+          try {
+            const { data } = await api.get("/pedidos");
+            items.value = Array.isArray(data) ? data : data?.data ?? [];
+          } finally {
+            loading.value = false;
+          }
+        }
+        async function fetchOne(id) {
+          try {
+            const { data } = await api.get(`/pedidos/${id}`);
+            if (!Array.isArray(data.itens)) data.itens = [];
+            return data;
+          } catch {
+            return { id_pedido: null, data: "", id_cliente: null, itens: [] };
+          }
+        }
+        async function create(payload) {
+          const { data } = await api.post("/pedidos", payload);
+          return data;
+        }
+        async function update(id, payload) {
+          const { data } = await api.put(`/pedidos/${id}`, payload);
+          return data;
+        }
+        async function remove(id) {
+          const { data } = await api.delete(`/pedidos/${id}`);
+          return data;
+        }
+        return { items, loading, fetchAll, fetchOne, create, update, remove };
+      }
+
+      // ====== ProdutosView ======
+      const ProdutosView = {
+        template: `
+<v-card flat>
+  <v-card-title class="d-flex align-center justify-space-between" style="background: linear-gradient(90deg,#FF1D79,#FF7158,#FE993B); color:white;">
+    <span class="text-h6">Produtos</span>
+    <div class="d-flex align-center" style="gap:.5rem;">
+      <v-text-field v-model="search" density="compact" label="Buscar" prepend-inner-icon="mdi-magnify" hide-details variant="outlined" style="max-width:260px; background:white; border-radius:6px;" />
+      <v-btn color="#FF1D79" dark @click="openDialog()" prepend-icon="mdi-plus">Novo</v-btn>
+      <v-btn color="#FF7158" dark @click="load()" prepend-icon="mdi-refresh">Atualizar</v-btn>
+    </div>
+  </v-card-title>
+
+  <v-data-table :headers="headers" :items="filtered" :loading="store.loading" item-key="id_produto" density="compact">
+    <template #item.preco="{ item }">{{ formatCurrency(item.preco) }}</template>
+    <template #item.actions="{ item }">
+      <v-btn size="small" icon="mdi-pencil" variant="text" color="#FE993B" @click="openDialog(item)"></v-btn>
+      <v-btn size="small" icon="mdi-delete" variant="text" color="error" @click="confirmDelete(item)"></v-btn>
+    </template>
+    <template #no-data>
+      <div class="text-center pa-6">Nenhum produto.</div>
+    </template>
+  </v-data-table>
+
+  <v-dialog v-model="dialog" max-width="520">
+    <v-card>
+      <v-card-title>{{ form.id_produto ? 'Editar Produto' : 'Novo Produto' }}</v-card-title>
+      <v-card-text>
+        <v-text-field label="Nome" v-model="form.nome" required></v-text-field>
+        <v-text-field label="Preço" v-model.number="form.preco" type="number" step="0.01"></v-text-field>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="dialog=false">Cancelar</v-btn>
+        <v-btn color="#FF7158" dark @click="save()">Salvar</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="dialogDelete" max-width="420">
+    <v-card>
+      <v-card-title>Excluir produto</v-card-title>
+      <v-card-text>Tem certeza que deseja excluir <strong>{{ form.nome }}</strong>?</v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="dialogDelete=false">Cancelar</v-btn>
+        <v-btn color="error" dark @click="doDelete()">Excluir</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+</v-card>
+`,
+        setup() {
+          const store = useProdutos();
+          const headers = [
+            { title: "ID", key: "id_produto", sortable: true, align: "start" },
+            { title: "Nome", key: "nome" },
+            { title: "Preço", key: "preco" },
+            { title: "Ações", key: "actions", sortable: false },
+          ];
+          const dialog = ref(false);
+          const dialogDelete = ref(false);
+          const form = reactive({ id_produto: null, nome: "", preco: null });
+          const search = ref("");
+
+          const filtered = computed(() => {
+            const list = Array.isArray(store.items.value)
+              ? store.items.value
+              : [];
+            if (!search.value) return list;
+            const s = search.value.toLowerCase();
+            return list.filter(
+              (it) =>
+                String(it.id_produto).includes(s) ||
+                (it.nome || "").toLowerCase().includes(s)
+            );
+          });
+
+          function openDialog(item) {
+            if (item) Object.assign(form, item);
+            else
+              Object.assign(form, { id_produto: null, nome: "", preco: null });
+            dialog.value = true;
+          }
+          async function save() {
+            if (!form.nome) return alert("Informe o nome");
+            const payload = { nome: form.nome, preco: form.preco };
+            if (form.id_produto) await store.update(form.id_produto, payload);
+            else await store.create(payload);
+            dialog.value = false;
+            await load();
+          }
+          function confirmDelete(item) {
+            Object.assign(form, item);
+            dialogDelete.value = true;
+          }
+          async function doDelete() {
+            await store.remove(form.id_produto);
+            dialogDelete.value = false;
+            await load();
+          }
+          async function load() {
+            await store.fetchAll();
+          }
+          onMounted(load);
+
+          return {
+            store,
+            headers,
+            dialog,
+            dialogDelete,
+            form,
+            openDialog,
+            save,
+            confirmDelete,
+            doDelete,
+            load,
+            search,
+            filtered,
+            formatCurrency,
+          };
+        },
+      };
+
+      // ====== ClientesView ======
+      const ClientesView = {
+        template: `
+<v-card flat>
+  <v-card-title class="d-flex align-center justify-space-between" style="background: linear-gradient(90deg,#FF1D79,#FF7158,#FE993B); color:white;">
+    <span class="text-h6">Clientes</span>
+    <div class="d-flex align-center" style="gap:.5rem;">
+      <v-text-field v-model="search" density="compact" label="Buscar" prepend-inner-icon="mdi-magnify" hide-details variant="outlined" style="max-width:260px; background:white; border-radius:6px;" />
+      <v-btn color="#FF1D79" dark @click="openDialog()" prepend-icon="mdi-plus">Novo</v-btn>
+      <v-btn color="#FF7158" dark @click="load()" prepend-icon="mdi-refresh">Atualizar</v-btn>
+    </div>
+  </v-card-title>
+
+  <v-data-table :headers="headers" :items="filtered" :loading="store.loading" item-key="id_cliente" density="compact">
+    <template #item.actions="{ item }">
+      <v-btn size="small" icon="mdi-pencil" variant="text" color="#FE993B" @click="openDialog(item)"></v-btn>
+      <v-btn size="small" icon="mdi-delete" variant="text" color="error" @click="confirmDelete(item)"></v-btn>
+    </template>
+    <template #no-data>
+      <div class="text-center pa-6">Nenhum cliente.</div>
+    </template>
+  </v-data-table>
+
+  <v-dialog v-model="dialog" max-width="520">
+    <v-card>
+      <v-card-title>{{ form.id_cliente ? 'Editar Cliente' : 'Novo Cliente' }}</v-card-title>
+      <v-card-text>
+        <v-text-field label="Nome" v-model="form.nome" required></v-text-field>
+        <v-text-field label="Email" v-model="form.email"></v-text-field>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="dialog=false">Cancelar</v-btn>
+        <v-btn color="#FF7158" dark @click="save()">Salvar</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="dialogDelete" max-width="420">
+    <v-card>
+      <v-card-title>Excluir cliente</v-card-title>
+      <v-card-text>Tem certeza que deseja excluir <strong>{{ form.nome }}</strong>?</v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="dialogDelete=false">Cancelar</v-btn>
+        <v-btn color="error" dark @click="doDelete()">Excluir</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+</v-card>
+`,
+        setup() {
+          const store = useClientes();
+          const headers = [
+            { title: "ID", key: "id_cliente" },
+            { title: "Nome", key: "nome" },
+            { title: "Email", key: "email" },
+            { title: "Ações", key: "actions", sortable: false },
+          ];
+          const dialog = ref(false);
+          const dialogDelete = ref(false);
+          const form = reactive({ id_cliente: null, nome: "", email: "" });
+          const search = ref("");
+
+          const filtered = computed(() => {
+            const list = Array.isArray(store.items.value)
+              ? store.items.value
+              : [];
+            if (!search.value) return list;
+            const s = search.value.toLowerCase();
+            return list.filter(
+              (it) =>
+                String(it.id_cliente).includes(s) ||
+                (it.nome || "").toLowerCase().includes(s) ||
+                (it.email || "").toLowerCase().includes(s)
+            );
+          });
+
+          function openDialog(item) {
+            if (item) Object.assign(form, item);
+            else Object.assign(form, { id_cliente: null, nome: "", email: "" });
+            dialog.value = true;
+          }
+          async function save() {
+            if (!form.nome) return alert("Informe o nome");
+            const payload = { nome: form.nome, email: form.email };
+            if (form.id_cliente) await store.update(form.id_cliente, payload);
+            else await store.create(payload);
+            dialog.value = false;
+            await load();
+          }
+          function confirmDelete(item) {
+            Object.assign(form, item);
+            dialogDelete.value = true;
+          }
+          async function doDelete() {
+            await store.remove(form.id_cliente);
+            dialogDelete.value = false;
+            await load();
+          }
+          async function load() {
+            await store.fetchAll();
+          }
+          onMounted(load);
+
+          return {
+            store,
+            headers,
+            dialog,
+            dialogDelete,
+            form,
+            openDialog,
+            save,
+            confirmDelete,
+            doDelete,
+            load,
+            search,
+            filtered,
+          };
+        },
+      };
+
+      // ====== PedidosView ======
+      // ====== PedidosView ======
+      const PedidosView = {
+        template: `
+<v-card flat>
+  <v-card-title class="d-flex align-center justify-space-between" style="background: linear-gradient(90deg,#FF1D79,#FF7158,#FE993B); color:white;">
+    <span class="text-h6">Pedidos</span>
+    <div class="d-flex align-center" style="gap:.5rem;">
+      <v-text-field v-model="search" density="compact" label="Buscar" prepend-inner-icon="mdi-magnify" hide-details variant="outlined" style="max-width:260px; background:white; border-radius:6px;" />
+      <v-btn color="#FF1D79" dark @click="openDialog()" prepend-icon="mdi-plus">Novo</v-btn>
+      <v-btn color="#FF7158" dark @click="load()" prepend-icon="mdi-refresh">Atualizar</v-btn>
+    </div>
+  </v-card-title>
+
+  <v-data-table :headers="headers" :items="filtered" :loading="store.loading" item-key="id_pedido" density="compact">
+    <template #item.data="{ item }">{{ formatDate(item.data) }}</template>
+    <template #item.actions="{ item }">
+      <v-btn size="small" icon="mdi-eye" variant="text" color="#FE993B" @click="openDialog(item,true)"></v-btn>
+      <v-btn size="small" icon="mdi-pencil" variant="text" color="#FE993B" @click="openDialog(item)"></v-btn>
+      <v-btn size="small" icon="mdi-delete" variant="text" color="error" @click="confirmDelete(item)"></v-btn>
+    </template>
+    <template #no-data>
+      <div class="text-center pa-6">Nenhum pedido.</div>
+    </template>
+  </v-data-table>
+
+  <v-dialog v-model="dialog" max-width="720">
+    <v-card>
+      <v-card-title>{{ form.id_pedido ? 'Editar Pedido' : 'Novo Pedido' }}</v-card-title>
+      <v-card-text>
+        <v-row>
+          <v-col cols="12" md="6">
+            <v-text-field label="Data" type="date" v-model="form.data" :readonly="readOnly"></v-text-field>
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-select label="Cliente" v-model="form.id_cliente" :items="clientesOptions" item-title="label" item-value="value" :disabled="readOnly"></v-select>
+          </v-col>
+        </v-row>
+        <v-divider class="my-4"></v-divider>
+        <v-btn @click="addItem()" :disabled="readOnly" prepend-icon="mdi-plus">Adicionar Item</v-btn>
+        <v-simple-table dense>
+          <thead>
+            <tr><th>Produto</th><th>Qtde</th><th>Preço</th><th>Total</th><th v-if="!readOnly">Ações</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="(it,i) in form.itens" :key="i">
+              <td>
+                <v-select :items="produtosOptions" v-model="it.id_produto" item-title="label" item-value="value" :disabled="readOnly"></v-select>
+              </td>
+              <td><v-text-field type="number" v-model.number="it.qtde" :disabled="readOnly" min="1"></v-text-field></td>
+              <td><v-text-field type="number" v-model.number="it.preco" :disabled="readOnly" step="0.01"></v-text-field></td>
+              <td>{{ formatCurrency((it.qtde||0)*(it.preco||0)) }}</td>
+              <td v-if="!readOnly"><v-btn icon="mdi-delete" color="error" @click="removeItem(i)"></v-btn></td>
+            </tr>
+          </tbody>
+        </v-simple-table>
+        <v-divider class="my-2"></v-divider>
+        <div class="text-right">Total Pedido: <strong>{{ formatCurrency(totalPedido) }}</strong></div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="dialog=false">Cancelar</v-btn>
+        <v-btn :disabled="readOnly" color="#FF7158" dark @click="save()">Salvar</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="dialogDelete" max-width="420">
+    <v-card>
+      <v-card-title>Excluir pedido</v-card-title>
+      <v-card-text>Tem certeza que deseja excluir o pedido <strong>ID {{ form.id_pedido }}</strong>?</v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="dialogDelete=false">Cancelar</v-btn>
+        <v-btn color="error" dark @click="doDelete()">Excluir</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+</v-card>
+`,
+        setup() {
+          const store = usePedidos();
+          const clientes = useClientes();
+          const produtos = useProdutos();
+
+          const headers = [
+            { title: "ID", key: "id_pedido" },
+            { title: "Data", key: "data" },
+            { title: "Cliente", key: "id_cliente" },
+            { title: "Ações", key: "actions", sortable: false },
+          ];
+          const dialog = ref(false);
+          const dialogDelete = ref(false);
+          const readOnly = ref(false);
+          const form = reactive({
+            id_pedido: null,
+            data: "",
+            id_cliente: null,
+            itens: [],
+          });
+          const search = ref("");
+
+          const clientesOptions = computed(() =>
+            Array.isArray(clientes.items.value)
+              ? clientes.items.value.map((c) => ({
+                  value: c.id_cliente,
+                  label: `${c.nome} (ID ${c.id_cliente})`,
+                }))
+              : []
+          );
+          const produtosOptions = computed(() =>
+            Array.isArray(produtos.items.value)
+              ? produtos.items.value.map((p) => ({
+                  value: p.id_produto,
+                  label: `${p.nome} — ${formatCurrency(p.preco)}`,
+                }))
+              : []
+          );
+          const filtered = computed(() => {
+            const list = Array.isArray(store.items.value)
+              ? store.items.value
+              : [];
+            if (!search.value) return list;
+            const s = search.value.toLowerCase();
+            return list.filter(
+              (it) =>
+                String(it.id_pedido).includes(s) ||
+                String(it.id_cliente).includes(s) ||
+                (it.data || "").toLowerCase().includes(s)
+            );
+          });
+          const totalPedido = computed(() =>
+            Array.isArray(form.itens)
+              ? form.itens.reduce(
+                  (acc, it) => acc + (+it.qtde || 0) * (+it.preco || 0),
+                  0
+                )
+              : 0
+          );
+
+          function addItem() {
+            if (!Array.isArray(form.itens)) form.itens = [];
+            form.itens.push({ id_produto: null, qtde: 1, preco: 0 });
+          }
+          function removeItem(idx) {
+            if (Array.isArray(form.itens)) form.itens.splice(idx, 1);
+          }
+
+          async function openDialog(row, viewOnly = false) {
+            readOnly.value = viewOnly;
+            if (row && row.id_pedido) {
+              const full = await store.fetchOne(row.id_pedido);
+              Object.assign(form, {
+                id_pedido: full.id_pedido,
+                data: full.data,
+                id_cliente: full.id_cliente,
+                itens: Array.isArray(full.itens) ? full.itens : [],
+              });
+            } else {
+              Object.assign(form, {
+                id_pedido: null,
+                data: new Date().toISOString().slice(0, 10),
+                id_cliente: null,
+                itens: [],
+              });
+            }
+            dialog.value = true;
+          }
+
+          async function save() {
+            if (!form.data) return alert("Informe a data");
+            if (!form.id_cliente) return alert("Selecione o cliente");
+            if (!Array.isArray(form.itens) || !form.itens.length)
+              return alert("Adicione pelo menos um item");
+            const payload = {
+              data_pedido: form.data,
+              id_cliente: form.id_cliente,
+              itens: form.itens,
+            };
+            if (form.id_pedido) await store.update(form.id_pedido, payload);
+            else await store.create(payload);
+            dialog.value = false;
+            await load();
+          }
+
+          function confirmDelete(row) {
+            Object.assign(form, row);
+            dialogDelete.value = true;
+          }
+          async function doDelete() {
+            await store.remove(form.id_pedido);
+            dialogDelete.value = false;
+            await load();
+          }
+
+          async function load() {
+            await Promise.all([clientes.fetchAll(), produtos.fetchAll()]);
+            await store.fetchAll();
+          }
+          onMounted(load);
+
+          function formatDate(str) {
+            if (!str) return "";
+            return String(str).slice(0, 10);
+          }
+
+          return {
+            store,
+            clientes,
+            produtos,
+            headers,
+            dialog,
+            dialogDelete,
+            form,
+            openDialog,
+            save,
+            confirmDelete,
+            doDelete,
+            load,
+            search,
+            filtered,
+            readOnly,
+            addItem,
+            removeItem,
+            produtosOptions,
+            clientesOptions,
+            totalPedido,
+            formatDate,
+            formatCurrency,
+          };
+        },
+      };
+
+      // ====== App ======
+      const App = {
+        components: { ProdutosView, ClientesView, PedidosView },
+        template: `
+<v-app>
+  <v-app-bar style="background: linear-gradient(90deg,#FF1D79,#FF7158,#FE993B); color:white;">
+    <v-app-bar-title></v-app-bar-title>
+    <v-spacer></v-spacer>
+  </v-app-bar>
+  <v-main>
+    <div class="pa-4 app-container">
+      <v-tabs v-model="tab" class="mb-4" grow>
+        <v-tab value="produtos" prepend-icon="mdi-package-variant-closed">Produtos</v-tab>
+        <v-tab value="clientes" prepend-icon="mdi-account">Clientes</v-tab>
+        <v-tab value="pedidos" prepend-icon="mdi-clipboard-text">Pedidos</v-tab>
+      </v-tabs>
+      <v-window v-model="tab">
+        <v-window-item value="produtos"><produtos-view /></v-window-item>
+        <v-window-item value="clientes"><clientes-view /></v-window-item>
+        <v-window-item value="pedidos"><pedidos-view /></v-window-item>
+      </v-window>
+    </div>
+  </v-main>
+</v-app>
+`,
+        setup() {
+          const tab = ref("produtos");
+          return { tab, API_BASE };
+        },
+      };
+
+      const vuetify = createVuetify();
+      createApp(App).use(vuetify).mount("#app");
+    </script>
+  </body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "znap",
+  "version": "1.0.0",
+  "description": "Znap Test",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcoshsteixeira/znap.git"
+  },
+  "author": "Marcos Teixeira",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/marcoshsteixeira/znap/issues"
+  },
+  "homepage": "https://github.com/marcoshsteixeira/znap#readme",
+  "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@fastify/mysql": "^5.0.2",
+    "fastify": "^5.5.0",
+    "mysql2": "^3.14.3"
+  }
+}
